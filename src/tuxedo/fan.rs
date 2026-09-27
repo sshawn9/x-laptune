@@ -55,10 +55,9 @@ pub fn read_fan_speeds() -> io::Result<[FanRpm; 2]> {
     ))
 }
 
-/// Enable manual control and set the full-fan bit, preserving other mode bits.
+/// Set the full-fan bit, preserving other mode bits.
 pub fn set_full_mode() -> io::Result<()> {
     let file = super::io::open_device()?;
-    super::io::set_fan_manual_control(&file, true)?;
     let current = super::io::read_i32(&file, UW_IOCTL_READ_MODE)?;
     let requested = (current & 0xff) | UW_MODE_FULL_FAN_BIT;
     if current & UW_MODE_FULL_FAN_BIT == 0 {
@@ -72,12 +71,10 @@ pub fn set_full_mode() -> io::Result<()> {
     Ok(())
 }
 
-/// Leave full-fan/custom-table mode and disable manual control.
+/// Leave full-fan/custom-table mode, preserving the EC manual-control setting.
 pub fn set_auto_mode() -> io::Result<()> {
     let file = super::io::open_device()?;
     let current = super::io::read_i32(&file, UW_IOCTL_READ_MODE)?;
-    // Keep full-speed control intact if disabling manual control fails.
-    super::io::set_fan_manual_control(&file, false)?;
     super::io::call(&file, UW_IOCTL_FAN_AUTO)?;
     super::io::write_i32(
         &file,
