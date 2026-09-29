@@ -21,5 +21,9 @@ in
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
+    systemd.tmpfiles.rules = [
+      "d /etc/x-laptune 0755 root root -"
+      "C /etc/x-laptune/fan-policy.json 0644 root root - ${cfg.package}/share/x-laptune/fan-policy.json"
+    ];
   };
 }

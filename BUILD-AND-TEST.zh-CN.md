@@ -64,7 +64,7 @@ in kernelPackages.callPackage ./nix/tuxedo-drivers/package.nix { }
 
 这里使用的是**本仓库的 `nix/tuxedo-drivers/package.nix`**，驱动版本、源码和补丁都由该文件决定。宿主机配置只负责提供匹配的内核及其构建环境。
 
-编译风扇模式切换所需的独立内核模块 `acpi_call`：
+编译自定义风扇策略所需的独立内核模块 `acpi_call`：
 
 ```bash
 nix build --impure --out-link result-acpi-call --expr '
@@ -116,7 +116,7 @@ SH
 - `modprobe -a` 加载当前内核提供的依赖模块；同时指定多个模块时需要 `-a`。
 - `insmod` 从本次构建产物的明确路径加载模块，避免误用其他版本。
 - `tuxedo_keyboard` 依赖兼容性模块，`uniwill_wmi` 和 `tuxedo_io` 依赖 `tuxedo_keyboard`，因此按上面的顺序加载。
-- `acpi_call` 供风扇模式切换调用固件、修改手动控制位。
+- `acpi_call` 用于调用固件下发自定义风扇表；常规 `auto`、`full` 操作使用 TUXEDO 驱动接口。
 
 这个加载流程不会安装驱动包中的 udev/hwdb 规则。本节针对以 root 权限进行的驱动和 CLI 测试；完整系统接入由 NixOS 模块负责。
 
@@ -157,7 +157,7 @@ sudo ./result/bin/x-laptune fan full
 sudo ./result/bin/x-laptune fan auto
 ```
 
-`fan auto` 会解除手动控制并恢复 EC 自动风扇策略。查询中的风扇编号目前没有对应到物理左右位置；`MIN RPM`、`MAX RPM` 为 `--` 表示该硬件范围未知。
+`fan auto` 会关闭全速和自定义风扇表，回到当前 OEM 档位的原厂曲线，保留 `0x0741` 共享控制位。查询中的风扇编号目前没有对应到物理左右位置；`MIN RPM`、`MAX RPM` 为 `--` 表示该硬件范围未知。
 
 查看其他操作参数：
 
@@ -167,6 +167,41 @@ sudo ./result/bin/x-laptune fan auto
 ./result/bin/x-laptune oem-mode --help
 ./result/bin/x-laptune cpu --help
 ```
+
+### 自定义风扇策略
+
+NixOS 模块在启用 `programs.x-laptune.enable` 时初始化 `/etc/x-laptune/fan-policy.json`，已有文件不会被覆盖。只临时运行构建产物时，可以先手动初始化；下面的选项会覆盖已有配置，只在需要初始化或重置时执行：
+
+~~~bash
+sudo ./result/bin/x-laptune fan custom --reset-config
+~~~
+
+编辑、查看并应用：
+
+~~~bash
+sudoedit /etc/x-laptune/fan-policy.json
+./result/bin/x-laptune fan policy show custom
+sudo ./result/bin/x-laptune fan custom
+~~~
+
+每次执行 `fan custom` 都重新读取该文件。修改文件本身不会立即影响正在运行的风扇；`--reset-config` 也只重置文件，应用需要另一次 `fan custom`。
+
+查询当前 EC 表、切回原厂曲线：
+
+~~~bash
+sudo ./result/bin/x-laptune fan policy
+sudo ./result/bin/x-laptune fan auto
+~~~
+
+`baseline` 仍是可独立查看和应用的内置基准：
+
+~~~bash
+./result/bin/x-laptune fan policy list
+./result/bin/x-laptune fan policy show baseline
+sudo ./result/bin/x-laptune fan policy apply baseline
+~~~
+
+自定义配置写入 EC 的独立 RAM 表，由 EC 继续负责选档、滞回、需求合并、启停和缓变。应用需要 TUXEDO 驱动和 `acpi_call`；查看与重置配置不要求加载驱动。格式和完整行为见 [默认策略说明](DEFAULT-FAN-POLICY.zh-CN.md#11-使用-x-laptune-应用独立策略)。
 
 ## 6. 测试后卸载
 

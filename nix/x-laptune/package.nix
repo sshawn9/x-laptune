@@ -11,6 +11,10 @@ rustPlatform.buildRustPackage {
   };
   cargoLock.lockFile = ../../Cargo.lock;
   doCheck = false;
+  postInstall = ''
+    install -Dm644 src/tuxedo/fan/policies/baseline.json \
+      "$out/share/x-laptune/fan-policy.json"
+  '';
   meta = {
     description = manifest.package.description;
     mainProgram = "x-laptune";

@@ -54,6 +54,8 @@ pub fn read_mode() -> io::Result<PerformanceMode> {
 /// Set the Uniwill OEM performance mode and verify the EC register readback.
 pub fn set_mode(mode: PerformanceMode) -> io::Result<()> {
     let file = super::io::open_device()?;
+    // Share the fan transaction lock until the OEM mode readback is verified.
+    file.lock()?;
     super::io::write_i32(&file, UW_IOCTL_SET_PERFORMANCE_PROFILE, mode.ioctl_value())?;
 
     let actual = PerformanceMode::read_from(&file)?;

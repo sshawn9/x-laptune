@@ -32,7 +32,7 @@ struct Args {
 enum Command {
     /// Query battery information or set the charging profile
     Battery(battery::Args),
-    /// Query fan mode and RPM, or switch to automatic or full-speed mode
+    /// Query fans, switch modes, or apply an EC fan policy
     Fan(fan::Args),
     /// Query or set the OEM performance mode
     OemMode(oem_mode::Args),

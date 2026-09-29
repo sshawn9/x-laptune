@@ -6,42 +6,45 @@ use std::{
 
 const DEVICE: &str = "/dev/tuxedo_io";
 const UW_IOCTL_CHECK_INTERFACE: libc::c_ulong = 0x8008_ec06;
-const UW_IOCTL_READ_MODE_ENABLE: libc::c_ulong = 0x8008_ef15;
+const EC_BASE: libc::off_t = 0xfe41_0000;
+const EC_LENGTH: usize = 4096;
 
-/// Read the verified GM6AQ7C EC mapping without loading a driver or writing EC state.
-pub(crate) fn read_ec<const N: usize>(offsets: [usize; N]) -> io::Result<[u8; N]> {
-    const BASE: libc::off_t = 0xfe41_0000;
-    const LENGTH: usize = 4096;
-
-    if offsets.iter().any(|&offset| offset >= LENGTH) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "EC offset exceeds the mapped range",
-        ));
-    }
+fn check_ec_firmware() -> io::Result<()> {
     if fs::read_to_string("/sys/class/dmi/id/board_name")?.trim() != "GM6AQ7C"
         || fs::read_to_string("/sys/class/dmi/id/bios_version")?.trim() != "N.1.04MRO11"
     {
         return Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "This read-only EC mapping has only been verified on GM6AQ7C / N.1.04MRO11",
+            "EC access has only been verified on GM6AQ7C / N.1.04MRO11",
         ));
     }
+    Ok(())
+}
+
+/// Read the verified GM6AQ7C EC mapping without loading a driver or writing EC state.
+pub(crate) fn read_ec<const N: usize>(offsets: [usize; N]) -> io::Result<[u8; N]> {
+    if offsets.iter().any(|&offset| offset >= EC_LENGTH) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "EC offset exceeds the mapped range",
+        ));
+    }
+    check_ec_firmware()?;
 
     let file = OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_SYNC)
         .open("/dev/mem")?;
-    // SAFETY: BASE is page-aligned and verified from this firmware's ECMA/ECRR.
+    // SAFETY: EC_BASE is page-aligned and verified from this firmware's ECMA/ECRR.
     // The live file descriptor is opened read-only; no writable mapping is created.
     let mapping = unsafe {
         libc::mmap(
             std::ptr::null_mut(),
-            LENGTH,
+            EC_LENGTH,
             libc::PROT_READ,
             libc::MAP_SHARED,
             file.as_raw_fd(),
-            BASE,
+            EC_BASE,
         )
     };
     if mapping == libc::MAP_FAILED {
@@ -54,10 +57,21 @@ pub(crate) fn read_ec<const N: usize>(offsets: [usize; N]) -> io::Result<[u8; N]
         unsafe { std::ptr::read_volatile(mapping.cast::<u8>().add(offset)) }
     });
     // SAFETY: This is the exact mapping and length returned above, no longer used.
-    if unsafe { libc::munmap(mapping, LENGTH) } < 0 {
+    if unsafe { libc::munmap(mapping, EC_LENGTH) } < 0 {
         return Err(io::Error::last_os_error());
     }
     Ok(values)
+}
+
+/// Share the device transaction lock while reading; unloaded drivers have no writers.
+pub(crate) fn lock_ec_read() -> io::Result<Option<File>> {
+    let file = match File::open(DEVICE) {
+        Ok(file) => file,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    };
+    file.lock_shared()?;
+    Ok(Some(file))
 }
 
 pub(crate) fn open_device() -> io::Result<File> {
@@ -100,20 +114,9 @@ pub(crate) fn call(file: &File, request: libc::c_ulong) -> io::Result<()> {
     Ok(())
 }
 
-/// Toggle the GM6AQ7C manual-control bit through its firmware EC access method.
-/// TUXEDO's W_UW_MODE_ENABLE ioctl is a no-op in the unmodified driver.
-pub(crate) fn set_fan_manual_control(device: &File, enabled: bool) -> io::Result<()> {
-    let expected = u8::from(enabled);
-    if read_i32(device, UW_IOCTL_READ_MODE_ENABLE)? & 1 == i32::from(expected) {
-        return Ok(());
-    }
-    if fs::read_to_string("/sys/class/dmi/id/board_name")?.trim() != "GM6AQ7C" {
-        return Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "This firmware EC control path has only been verified on GM6AQ7C",
-        ));
-    }
-
+/// Lock acpi_call for an EC transaction and verify the firmware's mapping.
+pub(crate) fn open_ec_writer() -> io::Result<File> {
+    check_ec_firmware()?;
     let mut acpi = OpenOptions::new()
         .read(true)
         .write(true)
@@ -122,35 +125,44 @@ pub(crate) fn set_fan_manual_control(device: &File, enabled: bool) -> io::Result
             if error.kind() == io::ErrorKind::NotFound {
                 io::Error::new(
                     error.kind(),
-                    "Load the acpi_call module before changing manual fan control",
+                    "Load the acpi_call module before applying a fan policy",
                 )
             } else {
                 error
             }
         })?;
-    // SAFETY: acpi owns a live file descriptor. Dropping it releases the lock.
+    // SAFETY: acpi owns a live descriptor. Dropping it releases the lock.
     if unsafe { libc::flock(acpi.as_raw_fd(), libc::LOCK_EX) } < 0 {
         return Err(io::Error::last_os_error());
     }
-
     let base = acpi_integer(&mut acpi, r"\_SB.PC00.LPCB.EC0.ECMA")?;
-    let current = u8::try_from(acpi_integer(&mut acpi, r"\_SB.INOU.ECRR 0x0741")?)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
-    let requested = (current & !1) | expected;
-    let address = base
-        .checked_add(0x0741)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "EC address overflow"))?;
-    // MMRW is the firmware method called by ECRW. It takes the firmware mutex
-    // and returns an integer, allowing acpi_call to report completion safely.
-    acpi_integer(
-        &mut acpi,
-        &format!(r"\_SB.INOU.MMRW {address:#x} 1 0 {requested:#x}"),
-    )?;
+    if base != EC_BASE as u64 {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            format!("Unexpected EC mapping: {base:#x}"),
+        ));
+    }
+    Ok(acpi)
+}
 
-    let actual = read_i32(device, UW_IOCTL_READ_MODE_ENABLE)?;
-    if actual & 1 != i32::from(expected) {
+/// Write one EC byte through the firmware, then verify its readback.
+pub(crate) fn write_ec(acpi: &mut File, offset: usize, value: u8) -> io::Result<()> {
+    if offset >= EC_LENGTH {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "EC offset exceeds the mapped range",
+        ));
+    }
+    let address = EC_BASE as u64 + offset as u64;
+    // MMRW is the firmware method used by ECRW and acquires the firmware mutex.
+    acpi_integer(
+        acpi,
+        &format!(r"\_SB.INOU.MMRW {address:#x} 1 0 {value:#x}"),
+    )?;
+    let actual = acpi_integer(acpi, &format!(r"\_SB.INOU.ECRR {offset:#x}"))?;
+    if actual != u64::from(value) {
         return Err(io::Error::other(format!(
-            "Manual fan control did not take effect: requested bit0={expected}, read back 0x{actual:02x}"
+            "EC {offset:#06x}: wrote {value:#04x}, read back {actual:#04x}"
         )));
     }
     Ok(())
