@@ -63,21 +63,38 @@ pub fn run() -> ExitCode {
     };
     let mut output = io::stdout().lock();
     let mut status = ExitCode::SUCCESS;
-    for command in commands {
-        let result = match command {
-            Command::Battery(command) => battery::run(&mut output, command, args.json),
-            Command::Fan(command) => fan::run(&mut output, command, args.json),
-            Command::OemMode(command) => oem_mode::run(&mut output, command, args.json),
-            Command::Cpu(command) => cpu::run(&mut output, command, args.json),
-            Command::MemoryTemp(command) => memory_temp::run(&mut output, command, args.json),
+    for (index, command) in commands.into_iter().enumerate() {
+        let (name, title) = match &command {
+            Command::Battery(_) => ("battery", "Battery"),
+            Command::Fan(_) => ("fan", "Fans"),
+            Command::OemMode(_) => ("oem-mode", "OEM Performance"),
+            Command::Cpu(_) => ("cpu", "CPU"),
+            Command::MemoryTemp(_) => ("memory-temp", "Memory Temperature"),
         };
+        let result = (|| {
+            if !args.json {
+                if index > 0 {
+                    writeln!(output)?;
+                }
+                writeln!(output, "[{title}]")?;
+                output.flush()?;
+            }
+            match command {
+                Command::Battery(command) => battery::run(&mut output, command, args.json),
+                Command::Fan(command) => fan::run(&mut output, command, args.json),
+                Command::OemMode(command) => oem_mode::run(&mut output, command, args.json),
+                Command::Cpu(command) => cpu::run(&mut output, command, args.json),
+                Command::MemoryTemp(command) => memory_temp::run(&mut output, command, args.json),
+            }?;
+            output.flush()
+        })();
 
         match result {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::BrokenPipe => return ExitCode::SUCCESS,
             Err(error) => {
                 let mut stderr = io::stderr().lock();
-                let _ = writeln!(stderr, "x-laptune: {error}");
+                let _ = writeln!(stderr, "x-laptune {name}: {error}");
                 if error.kind() == io::ErrorKind::PermissionDenied {
                     let _ = writeln!(stderr, "Permission denied. Run this command with sudo.");
                 }

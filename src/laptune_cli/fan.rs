@@ -59,17 +59,21 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
             ("Full-speed mode", state.full_speed),
             ("Manual control", state.manual_control),
         ] {
-            writeln!(output, "{label}: {}", if enabled { "on" } else { "off" })?;
+            writeln!(
+                output,
+                "{label:<18} : {}",
+                if enabled { "on" } else { "off" }
+            )?;
         }
         writeln!(
             output,
-            "\n{: <8} {:>10} {:>10} {:>10}",
+            "\n{:>3}  {:>8}  {:>8}  {:>8}",
             "FAN", "RPM", "MIN RPM", "MAX RPM"
         )?;
         for (index, speed) in speeds.iter().enumerate() {
             writeln!(
                 output,
-                "{:<8} {:>10} {:>10} {:>10}",
+                "{:>3}  {:>8}  {:>8}  {:>8}",
                 index + 1,
                 speed.current_rpm,
                 speed

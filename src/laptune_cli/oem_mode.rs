@@ -25,6 +25,6 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
     if as_json {
         write_json(output, json!({ "mode": actual.to_string() }))
     } else {
-        writeln!(output, "OEM performance mode: {actual}")
+        writeln!(output, "{:<18} : {actual}", "Mode")
     }
 }

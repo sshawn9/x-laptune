@@ -86,9 +86,11 @@ fn limits_json(limits: &[RaplPowerLimit]) -> Value {
 }
 
 fn print_limits(output: &mut impl Write, limits: &[RaplPowerLimit]) -> io::Result<()> {
+    writeln!(output, "Power limits")?;
     writeln!(
         output,
-        "CPU power limits (W), reported maxima (W), and time windows (µs):"
+        "{:<12}  {:<5}  {:>11}  {:>16}  {:>11}",
+        "PACKAGE", "LIMIT", "CURRENT (W)", "REPORTED MAX (W)", "WINDOW (µs)"
     )?;
     for limit in limits {
         let label = match limit.name.as_str() {
@@ -106,7 +108,7 @@ fn print_limits(output: &mut impl Write, limits: &[RaplPowerLimit]) -> io::Resul
             .unwrap_or_else(|| "--".into());
         writeln!(
             output,
-            "{:<12} {label}  {:.3} W  reported max {maximum} W  window {window} µs",
+            "{:<12}  {label:<5}  {:>11.3}  {maximum:>16}  {window:>11}",
             limit.package,
             limit.current_microwatts as f64 / 1_000_000.0
         )?;
@@ -192,13 +194,13 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
             } else {
                 writeln!(
                     output,
-                    "{:<10} {:<10} {:>14} {:>14}",
+                    "{:<10}  {:<8}  {:>14}  {:>14}",
                     "POLICY", "CPUs", "MAX (MHz)", "HW MAX (MHz)"
                 )?;
                 for policy in &policies {
                     writeln!(
                         output,
-                        "{:<10} {:<10} {:>14.3} {:>14.3}",
+                        "{:<10}  {:<8}  {:>14.3}  {:>14.3}",
                         policy.name,
                         policy.cpus,
                         policy.current_max_khz as f64 / 1000.0,
@@ -222,13 +224,13 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
             } else {
                 writeln!(
                     output,
-                    "{:<10} {:<10} {:<20} AVAILABLE",
+                    "{:<10}  {:<8}  {:<20}  AVAILABLE",
                     "POLICY", "CPUs", "EPP"
                 )?;
                 for policy in &policies {
                     writeln!(
                         output,
-                        "{:<10} {:<10} {:<20} {}",
+                        "{:<10}  {:<8}  {:<20}  {}",
                         policy.name,
                         policy.cpus,
                         policy
@@ -255,11 +257,11 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
                     }),
                 )
             } else {
-                writeln!(output, "CPU frequency ranges (MHz) and EPP:")?;
+                writeln!(output, "Frequency and EPP")?;
                 writeln!(
                     output,
-                    "{:<10} {:<8} {:<19} {:<19} EPP",
-                    "POLICY", "CPUs", "HARDWARE", "LIMITS"
+                    "{:<10}  {:<8}  {:>19}  {:>19}  EPP",
+                    "POLICY", "CPUs", "HARDWARE (MHz)", "LIMITS (MHz)"
                 )?;
                 for policy in &policies {
                     let hardware = format!(
@@ -274,7 +276,7 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
                     );
                     writeln!(
                         output,
-                        "{:<10} {:<8} {:<19} {:<19} {}",
+                        "{:<10}  {:<8}  {:>19}  {:>19}  {}",
                         policy.name,
                         policy.cpus,
                         hardware,

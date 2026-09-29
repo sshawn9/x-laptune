@@ -35,22 +35,24 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
         "Failed to find memory temperature sensors",
         temperature::discover_sensors(),
     )?;
+    if !as_json {
+        writeln!(output, "{:<12}  {:>16}", "SENSOR", "TEMPERATURE (°C)")?;
+    }
     let mut samples = 0;
     loop {
         let readings = temperature::read_temperatures(&sensors);
         if as_json {
             write_json(output, json!({ "temperatures_millicelsius": readings }))?;
         } else {
-            let values: Vec<_> = readings
-                .iter()
-                .map(|(sensor, value)| {
-                    let value = value
-                        .map(|value| format!("{:.2} °C", f64::from(value) / 1000.0))
-                        .unwrap_or_else(|| "-- °C".into());
-                    format!("{sensor}: {value}")
-                })
-                .collect();
-            writeln!(output, "{}", values.join(" | "))?;
+            if samples > 0 {
+                writeln!(output)?;
+            }
+            for (sensor, value) in readings {
+                let value = value
+                    .map(|value| format!("{:.2}", f64::from(value) / 1000.0))
+                    .unwrap_or_else(|| "--".into());
+                writeln!(output, "{sensor:<12}  {value:>16}")?;
+            }
         }
         output.flush()?;
         samples += 1;

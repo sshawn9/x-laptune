@@ -31,7 +31,7 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
         return if as_json {
             write_json(output, json!({ "profile": actual }))
         } else {
-            writeln!(output, "Charging profile: {actual}")
+            writeln!(output, "{:<18} : {actual}", "Charging profile")
         };
     }
 
@@ -55,18 +55,26 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
     } else {
         writeln!(
             output,
-            "Charging profile: {}",
+            "{:<18} : {}",
+            "Charging profile",
             profile.as_deref().unwrap_or("--")
         )?;
         writeln!(
             output,
-            "Available profiles: {}",
+            "{:<18} : {}",
+            "Available profiles",
             available.as_deref().unwrap_or("--")
         )?;
-        writeln!(output, "Design capacity: {:.3} mAh", design as f64 / 1000.0)?;
         writeln!(
             output,
-            "Current charge: {:.3} mAh ({percentage}%)",
+            "{:<18} : {:.3} mAh",
+            "Design capacity",
+            design as f64 / 1000.0
+        )?;
+        writeln!(
+            output,
+            "{:<18} : {:.3} mAh ({percentage}%)",
+            "Current charge",
             charge as f64 / 1000.0
         )
     }
