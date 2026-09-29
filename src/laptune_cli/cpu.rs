@@ -13,7 +13,7 @@ use crate::cpu::{
 
 #[derive(clap::Args)]
 #[command(
-    after_help = "With no subcommand, query frequency ranges, EPP, PL1, and PL2.\n\nExamples:\n  x-laptune cpu\n  x-laptune cpu epp\n  sudo x-laptune cpu max-frequency 3500\n  sudo x-laptune cpu pl1 90"
+    after_help = "With no subcommand, query frequency ranges, EPP, PL1, and PL2.\n\nExamples:\n  x-laptune cpu\n  x-laptune cpu epp\n  sudo x-laptune cpu max-frequency 3500\n  sudo x-laptune cpu max-frequency --reset\n  sudo x-laptune cpu pl1 90"
 )]
 pub(super) struct Args {
     #[command(subcommand)]
@@ -22,13 +22,16 @@ pub(super) struct Args {
 
 #[derive(Subcommand)]
 enum CpuCommand {
-    /// Query frequency limits or set the maximum frequency for all CPUs (MHz)
+    /// Query, set (MHz), or reset the maximum frequency for all CPUs
     #[command(
-        after_help = "Examples:\n  x-laptune cpu max-frequency\n  sudo x-laptune cpu max-frequency 3500"
+        after_help = "Examples:\n  x-laptune cpu max-frequency\n  sudo x-laptune cpu max-frequency 3500\n  sudo x-laptune cpu max-frequency --reset"
     )]
     MaxFrequency {
         #[arg(value_name = "MHZ")]
         mhz: Option<NonZeroU64>,
+        /// Restore each policy's hardware maximum, not a previous custom limit
+        #[arg(long, conflicts_with = "mhz")]
+        reset: bool,
     },
     /// Query current and available EPP values, or set EPP for all CPUs
     #[command(
@@ -135,7 +138,13 @@ fn show_power_limit(output: &mut impl Write, name: &str, as_json: bool) -> io::R
 pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Result<()> {
     let Args { command } = args;
     match &command {
-        Some(CpuCommand::MaxFrequency { mhz: Some(mhz) }) => {
+        Some(CpuCommand::MaxFrequency { reset: true, .. }) => {
+            context(
+                "Failed to reset the CPU maximum frequency",
+                cpu_performance::reset_max_frequency(),
+            )?;
+        }
+        Some(CpuCommand::MaxFrequency { mhz: Some(mhz), .. }) => {
             context(
                 "Failed to set the CPU maximum frequency",
                 cpu_performance::set_max_frequency_mhz(mhz.get()),

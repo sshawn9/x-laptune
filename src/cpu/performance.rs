@@ -148,6 +148,17 @@ pub fn set_max_frequency_mhz(max_mhz: u64) -> io::Result<()> {
     write_policy_values("scaling_max_freq", &paths, &values)
 }
 
+/// Restore every policy's maximum frequency limit to its hardware maximum.
+pub fn reset_max_frequency() -> io::Result<()> {
+    let paths = policy_paths()?;
+    let values = paths
+        .iter()
+        .map(|path| read_number(path, "cpuinfo_max_freq").map(|value| value.to_string()))
+        .collect::<io::Result<Vec<_>>>()?;
+
+    write_policy_values("scaling_max_freq", &paths, &values)
+}
+
 /// Set the EPP preference on every policy, such as `performance` or `balance_power`.
 pub fn set_energy_performance_preference(value: &str) -> io::Result<()> {
     let paths = policy_paths()?;
