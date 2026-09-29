@@ -184,7 +184,14 @@ sudoedit /etc/x-laptune/fan-policy.json
 sudo ./result/bin/x-laptune fan custom
 ~~~
 
-每次执行 `fan custom` 都重新读取该文件。修改文件本身不会立即影响正在运行的风扇；`--reset-config` 也只重置文件，应用需要另一次 `fan custom`。
+使用其他配置文件时，添加 `--config FILE`；未指定时默认使用 `/etc/x-laptune/fan-policy.json`：
+
+~~~bash
+./result/bin/x-laptune fan custom --config ./fan-policy.json --reset-config
+sudo ./result/bin/x-laptune fan custom --config ./fan-policy.json
+~~~
+
+每次执行 `fan custom` 都重新读取选定文件。修改文件本身不会立即影响正在运行的风扇；`--reset-config` 也只重置选定文件，应用需要另一次使用相同路径的 `fan custom`。
 
 查询当前 EC 表、切回原厂曲线：
 

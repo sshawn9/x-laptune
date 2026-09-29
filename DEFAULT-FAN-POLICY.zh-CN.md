@@ -338,7 +338,7 @@ EC 使用 8051 分银行代码。高段指令的文件偏移为 `0x18xxx` / `0x1
 | 策略 | 数据来源 |
 | --- | --- |
 | `baseline` | 当前程序内置的基准表 |
-| `custom` | 每次调用时重新读取 `/etc/x-laptune/fan-policy.json` |
+| `custom` | 每次调用时重新读取 `--config FILE` 指定的文件；默认 `/etc/x-laptune/fan-policy.json` |
 
 启用 `programs.x-laptune.enable` 后，NixOS 通过 tmpfiles 在该文件不存在时复制初始配置。它是 `root:root 0644` 的普通文件，可以使用 `sudoedit` 编辑；后续开机、系统切换和包升级不会用初始内容覆盖已有文件。
 
@@ -375,7 +375,13 @@ x-laptune fan policy show custom
 sudo x-laptune fan custom
 ~~~
 
-`x-laptune fan policy apply custom` 与 `x-laptune fan custom` 使用相同的读取和应用路径。程序不缓存文件内容，也不持续监视文件：保存修改后，下次切换到 `custom` 才应用新配置。配置无效时会报错，不把错误配置写入 EC。
+可以指定其他配置文件；每次调用都读取指定路径，未指定时才使用默认系统配置：
+
+~~~bash
+sudo x-laptune fan custom --config ./fan-policy.json
+~~~
+
+`x-laptune fan policy apply custom` 仍读取默认系统配置，与不带 `--config` 的 `x-laptune fan custom` 一致。程序不缓存文件内容，也不持续监视文件：保存修改后，下次切换到 `custom` 才应用新配置。配置无效时会报错，不把错误配置写入 EC。
 
 ### 覆盖恢复初始配置
 
@@ -383,13 +389,20 @@ sudo x-laptune fan custom
 sudo x-laptune fan custom --reset-config
 ~~~
 
-此选项会把系统配置文件覆盖为当前程序内置的 `baseline` 内容。**只重置配置文件，不切换风扇模式，也不修改当前 EC 表。** 要立即应用恢复后的内容，再执行：
+此选项会把选定的配置文件覆盖为当前程序内置的 `baseline` 内容。默认重置系统配置；使用 `--config FILE` 时只重置指定文件。**只重置配置文件，不切换风扇模式，也不修改当前 EC 表。** 要立即应用恢复后的内容，再执行：
 
 ~~~bash
 sudo x-laptune fan custom
 ~~~
 
-切回原厂曲线仍使用 `sudo x-laptune fan auto`，它不会改动系统配置文件。
+重置并应用指定文件：
+
+~~~bash
+x-laptune fan custom --config ./fan-policy.json --reset-config
+sudo x-laptune fan custom --config ./fan-policy.json
+~~~
+
+切回原厂曲线仍使用 `sudo x-laptune fan auto`，它不会改动配置文件。
 
 如果需要独立保存其他配置，仍可导出基准并按文件路径应用：
 
@@ -428,7 +441,7 @@ JSON 中 CPU、GPU 各有三个长度为 16 的数组，数组索引就是档位
 
 自定义表启用后，保留原来的需求合并、低档第二风扇停转以及缓变逻辑。没有新增用户态温度轮询或调速守护进程。`baseline` 是默认档曲线的副本，不是自动跟随之后的 OEM 模式切换重新选表；切回 `fan auto` 后才重新由当前 OEM 档位选择原厂表。
 
-系统配置文件长期保存在 `/etc/x-laptune/fan-policy.json`；已下发的风扇表位于 EC RAM，不承诺跨重启、驱动重载或睡眠恢复保持。需要在这些事件后重新启用时，再执行 `x-laptune fan custom`。NixOS 初始化配置文件不会自动应用策略，当前实现不新增风扇开机或唤醒服务。
+系统配置文件长期保存在 `/etc/x-laptune/fan-policy.json`；已下发的风扇表位于 EC RAM，不承诺跨重启、驱动重载或睡眠恢复保持。需要在这些事件后重新启用时，再执行 `x-laptune fan custom`；使用其他配置时带上对应的 `--config FILE`。NixOS 初始化配置文件不会自动应用策略，当前实现不新增风扇开机或唤醒服务。
 
 ### 本次实现的实机验证
 

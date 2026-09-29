@@ -84,30 +84,40 @@ impl Policy {
 
 /// Load a policy afresh; "custom" always reads the editable system configuration.
 pub fn load(name_or_path: &str) -> io::Result<Policy> {
-    let text = if let Some((_, text)) = BUILTIN_POLICIES
+    if let Some((_, text)) = BUILTIN_POLICIES
         .iter()
         .find(|(name, _)| *name == name_or_path)
     {
-        (*text).to_owned()
+        parse(text)
     } else {
         let path = if name_or_path == "custom" {
             CUSTOM_POLICY_PATH
         } else {
             name_or_path
         };
-        fs::read_to_string(path)
-            .map_err(|error| io::Error::new(error.kind(), format!("{path}: {error}")))?
-    };
-    let policy: Policy = serde_json::from_str(&text)
+        load_file(Path::new(path))
+    }
+}
+
+/// Read and validate a configuration file without interpreting its name as a built-in policy.
+pub fn load_file(path: &Path) -> io::Result<Policy> {
+    let text = fs::read_to_string(path)
+        .map_err(|error| io::Error::new(error.kind(), format!("{}: {error}", path.display())))?;
+    parse(&text)
+}
+
+fn parse(text: &str) -> io::Result<Policy> {
+    let policy: Policy = serde_json::from_str(text)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
     policy.to_bytes()?;
     Ok(policy)
 }
 
 /// Overwrite the editable configuration with the initial baseline, without touching EC state.
-pub fn reset_custom_config() -> io::Result<()> {
-    let path = Path::new(CUSTOM_POLICY_PATH);
-    fs::create_dir_all(path.parent().unwrap())?;
+pub fn reset_custom_config(path: &Path) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     fs::write(path, BASELINE)
 }
 

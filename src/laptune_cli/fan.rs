@@ -1,13 +1,16 @@
 use clap::Subcommand;
 use serde_json::json;
-use std::io::{self, Write};
+use std::{
+    io::{self, Write},
+    path::PathBuf,
+};
 
 use super::{context, write_json};
 use crate::tuxedo::fan::{self, policy};
 
 #[derive(clap::Args)]
 #[command(
-    after_help = "Examples:\n  sudo x-laptune fan\n  sudo x-laptune fan auto\n  sudo x-laptune fan full\n  x-laptune fan policy list\n  x-laptune fan policy show baseline\n  sudo x-laptune fan policy apply baseline\n  sudo x-laptune fan custom\n  sudo x-laptune fan custom --reset-config"
+    after_help = "Examples:\n  sudo x-laptune fan\n  sudo x-laptune fan auto\n  sudo x-laptune fan full\n  x-laptune fan policy list\n  x-laptune fan policy show baseline\n  sudo x-laptune fan policy apply baseline\n  sudo x-laptune fan custom\n  sudo x-laptune fan custom --config ./fan-policy.json\n  sudo x-laptune fan custom --reset-config"
 )]
 pub(super) struct Args {
     #[command(subcommand)]
@@ -20,8 +23,11 @@ enum Command {
     Auto,
     /// Request full-speed fan mode
     Full,
-    /// Read and apply /etc/x-laptune/fan-policy.json
+    /// Read and apply a custom fan configuration
     Custom {
+        /// Configuration file to read or reset
+        #[arg(long, value_name = "FILE", default_value = policy::CUSTOM_POLICY_PATH)]
+        config: PathBuf,
         /// Overwrite the config with its initial baseline and exit without applying it
         #[arg(long)]
         reset_config: bool,
@@ -53,32 +59,33 @@ pub(super) fn run(output: &mut impl Write, args: Args, as_json: bool) -> io::Res
     match args.command {
         Some(Command::Auto) => context("Failed to change the fan mode", fan::set_auto_mode())?,
         Some(Command::Full) => context("Failed to change the fan mode", fan::set_full_mode())?,
-        Some(Command::Custom { reset_config }) => {
+        Some(Command::Custom {
+            config,
+            reset_config,
+        }) => {
             if reset_config {
                 context(
                     "Failed to reset the custom fan configuration",
-                    policy::reset_custom_config(),
+                    policy::reset_custom_config(&config),
                 )?;
                 return if as_json {
                     write_json(
                         output,
-                        json!({ "config": policy::CUSTOM_POLICY_PATH, "reset": true }),
+                        json!({ "config": config.to_string_lossy(), "reset": true }),
                     )
                 } else {
                     writeln!(
                         output,
                         "Reset custom fan configuration: {}",
-                        policy::CUSTOM_POLICY_PATH
+                        config.display()
                     )
                 };
             }
-            return run_policy(
-                output,
-                Some(PolicyCommand::Apply {
-                    policy: "custom".into(),
-                }),
-                as_json,
-            );
+            let definition = context(
+                "Failed to load the custom fan configuration",
+                policy::load_file(&config),
+            )?;
+            context("Failed to apply the fan policy", policy::apply(&definition))?;
         }
         Some(Command::Policy { command }) => return run_policy(output, command, as_json),
         None => {}
