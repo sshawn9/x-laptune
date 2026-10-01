@@ -11,7 +11,7 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "tuxedo-drivers-${kernel.version}";
-  version = "4.22.3";
+  version = "4.24.0";
 
   src = fetchFromGitLab {
     group = "tuxedocomputers";
