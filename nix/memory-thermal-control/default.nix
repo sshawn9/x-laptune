@@ -21,7 +21,7 @@ in
 
     intervalMs = lib.mkOption {
       type = lib.types.ints.positive;
-      default = 2000;
+      default = 5000;
       description = "The memory temperature sampling interval in milliseconds.";
     };
   };

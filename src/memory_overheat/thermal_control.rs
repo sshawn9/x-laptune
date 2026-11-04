@@ -49,7 +49,7 @@ fn update_throttling(
         .into_values()
         .flatten()
         .max();
-    let target = if highest.is_some_and(|temperature| temperature >= 90_000) {
+    let target = if highest.is_some_and(|temperature| temperature >= 120_000) {
         75
     } else {
         0

@@ -10,7 +10,7 @@ use std::{io, num::NonZeroU64, process::ExitCode, time::Duration};
 )]
 struct Args {
     /// Sampling interval in milliseconds
-    #[arg(long, default_value = "2000")]
+    #[arg(long, default_value = "5000")]
     interval_ms: NonZeroU64,
 }
 
