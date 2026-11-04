@@ -9,7 +9,7 @@ let
 in
 {
   options.programs.x-laptune = {
-    enable = lib.mkEnableOption "the x-laptune command-line tool";
+    enable = lib.mkEnableOption "x-laptune and its hardware features and services";
 
     package = lib.mkOption {
       type = lib.types.package;
@@ -21,6 +21,12 @@ in
 
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
+    boot.extraModulePackages = [ config.boot.kernelPackages.acpi_call ];
+    boot.kernelModules = [
+      "spd5118"
+      "intel_powerclamp"
+      "acpi_call"
+    ];
     systemd.tmpfiles.rules = [
       "d /etc/x-laptune 0755 root root -"
       "C /etc/x-laptune/fan-policy.json 0644 root root - ${cfg.package}/share/x-laptune/fan-policy.json"

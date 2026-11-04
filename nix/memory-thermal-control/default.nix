@@ -10,7 +10,7 @@ in
   imports = [ ../x-laptune ];
 
   options.services.x-laptune.memoryThermalControl = {
-    enable = lib.mkEnableOption "x-laptune memory thermal control";
+    enable = lib.mkEnableOption "x-laptune memory thermal control (requires programs.x-laptune.enable)";
 
     allowedUsers = lib.mkOption {
       type = lib.types.listOf lib.types.str;
@@ -26,11 +26,7 @@ in
     };
   };
 
-  config = lib.mkIf cfg.enable {
-    boot.kernelModules = [
-      "spd5118"
-      "intel_powerclamp"
-    ];
+  config = lib.mkIf (config.programs.x-laptune.enable && cfg.enable) {
     boot.extraModprobeConfig = ''
       options intel_powerclamp max_idle=75
     '';
